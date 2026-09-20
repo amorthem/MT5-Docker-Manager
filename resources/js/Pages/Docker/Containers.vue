@@ -46,7 +46,7 @@ const loadContainers = async (silent = false) => {
     error.value = null;
 
     try {
-        const response = await window.axios.get('/api/containers/overview');
+        const response = await window.axios.get('/docker-containers/data/overview');
         containers.value = response.data.data ?? [];
     } catch (exception) {
         error.value = errorMessage(exception, 'โหลดรายการ container ไม่สำเร็จ');
@@ -63,7 +63,7 @@ const restartContainer = async (container) => {
     error.value = null;
 
     try {
-        await window.axios.post(`/api/containers/${container.id}/restart`);
+        await window.axios.post(`/docker-containers/data/${container.id}/restart`);
         await loadContainers(true);
     } catch (exception) {
         error.value = errorMessage(exception, `Restart ${container.name} ไม่สำเร็จ`);
@@ -79,7 +79,7 @@ const createContainer = async () => {
     try {
         const payload = { name: newContainer.value.name, image: newContainer.value.image };
         if (newContainer.value.command.trim()) payload.command = newContainer.value.command.trim().split(/\s+/);
-        await window.axios.post('/api/containers', payload);
+        await window.axios.post('/docker-containers/data', payload);
         showCreate.value = false;
         newContainer.value = { name: '', image: '', command: '' };
         await loadContainers(true);
@@ -96,7 +96,7 @@ const openCreate = async () => {
     createError.value = null;
 
     try {
-        const response = await window.axios.get('/api/containers/images');
+        const response = await window.axios.get('/docker-containers/data/images/list');
         images.value = response.data.data ?? [];
         if (!newContainer.value.image && images.value[0]?.tags?.[0]) {
             newContainer.value.image = images.value[0].tags[0];

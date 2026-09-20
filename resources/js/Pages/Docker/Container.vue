@@ -19,7 +19,7 @@ const canRestart = computed(() => ['support', 'admin', 'dev'].includes(page.prop
 
 const loadContainer = async () => {
     try {
-        const response = await window.axios.get(`/api/containers/${props.containerId}`);
+        const response = await window.axios.get(`/docker-containers/data/${props.containerId}`);
         container.value = response.data.data;
     } catch (exception) {
         error.value = exception.response?.data?.message ?? 'โหลดข้อมูล container ไม่สำเร็จ';
@@ -33,7 +33,7 @@ const loadLogs = async () => {
     logsError.value = null;
 
     try {
-        const response = await window.axios.get(`/api/containers/${props.containerId}/logs?tail=200`);
+        const response = await window.axios.get(`/docker-containers/data/${props.containerId}/logs?tail=200`);
         logs.value = response.data.data.logs ?? '';
     } catch (exception) {
         logsError.value = exception.response?.data?.message ?? 'โหลด Docker container logs ไม่สำเร็จ';
@@ -47,7 +47,7 @@ const loadMetrics = async () => {
     metricsError.value = null;
 
     try {
-        const response = await window.axios.get(`/api/containers/${props.containerId}/metrics`);
+        const response = await window.axios.get(`/docker-containers/data/${props.containerId}/metrics`);
         metrics.value = response.data.data;
     } catch (exception) {
         metricsError.value = exception.response?.data?.message ?? 'โหลด metrics ไม่สำเร็จ';
@@ -63,7 +63,7 @@ const restartContainer = async () => {
     error.value = null;
 
     try {
-        await window.axios.post(`/api/containers/${props.containerId}/restart`);
+        await window.axios.post(`/docker-containers/data/${props.containerId}/restart`);
         await Promise.all([loadContainer(), loadMetrics()]);
     } catch (exception) {
         error.value = exception.response?.data?.message ?? 'Restart container ไม่สำเร็จ';

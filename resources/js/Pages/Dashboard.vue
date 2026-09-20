@@ -56,7 +56,7 @@ const loadContainers = async (silent = false) => {
     if (silent) refreshing.value = true;
     error.value = null;
     try {
-        const response = await window.axios.get('/api/containers/overview');
+        const response = await window.axios.get('/dashboard/data/containers/overview');
         containers.value = response.data.data ?? [];
     } catch (exception) {
         error.value = exception.response?.data?.message ?? 'Docker daemon ยังไม่พร้อมใช้งาน';
@@ -68,7 +68,7 @@ const loadContainers = async (silent = false) => {
 
 const loadHostMetrics = async () => {
     try {
-        hostMetrics.value = (await window.axios.get('/api/metrics/host')).data.data;
+        hostMetrics.value = (await window.axios.get('/dashboard/data/metrics/host')).data.data;
     } catch (exception) {
         hostMetrics.value = null;
     }
