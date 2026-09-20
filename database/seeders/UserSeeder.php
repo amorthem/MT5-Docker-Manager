@@ -15,7 +15,7 @@ class UserSeeder extends Seeder
             ['email' => 'dev@localhost'],
             [
                 'name' => 'Dev',
-                'password' => Hash::make('12345678'),
+                'password' => Hash::make('46NrO,gT8s6M'),
                 'role' => UserRole::Dev,
                 'email_verified_at' => now(),
             ],
