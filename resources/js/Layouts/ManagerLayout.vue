@@ -24,6 +24,6 @@ const logout = () => router.post(route('logout'));
             </div>
         </aside>
         <div v-if="open" class="sidebar-backdrop" @click="open = false" />
-        <main class="manager-main"><header class="mobile-header"><button class="menu-button" aria-label="Open navigation" @click="open = true">☰</button><span class="mobile-brand">MT5 <b>CONTROL</b></span></header><div class="manager-content"><slot /></div></main>
+        <main class="manager-main"><header class="mobile-header"><button class="menu-button" aria-label="Open navigation" @click="open = true">☰</button><span class="mobile-brand">MT5 <b>MANAGER</b></span></header><div class="manager-content"><slot /></div></main>
     </div>
 </template>

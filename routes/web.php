@@ -33,6 +33,9 @@ Route::middleware([
 
     Route::prefix('docker-containers/data')->name('docker.data.')->group(function () {
         Route::get('/overview', [ApiDockerController::class, 'overview'])->name('overview');
+        Route::put('/{container}/resources', [ApiDockerController::class, 'updateResources'])
+            ->middleware('role:dev')
+            ->name('resources');
         Route::get('/{container}', [ApiDockerController::class, 'show'])->name('show');
         Route::get('/{container}/logs', [ApiDockerController::class, 'logs'])->name('logs');
         Route::get('/{container}/metrics', [ApiDockerController::class, 'metrics'])->name('metrics');

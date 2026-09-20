@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link } from '@inertiajs/vue3';
 import VueApexCharts from 'vue3-apexcharts';
 import ManagerLayout from '@/Layouts/ManagerLayout.vue';
 
@@ -11,14 +11,8 @@ const loading = ref(true);
 const refreshing = ref(false);
 const error = ref(null);
 const hostMetrics = ref(null);
-const showCreate = ref(false);
-const creating = ref(false);
-const createError = ref(null);
-const newContainer = ref({ name: '', image: '' });
 let refreshTimer;
 
-const page = usePage();
-const isDev = computed(() => page.props.auth.user.role === 'dev');
 const filteredContainers = computed(() => containers.value.filter((container) => {
     const matchesSearch = `${container.name} ${container.image}`.toLowerCase().includes(search.value.toLowerCase());
     return matchesSearch && (stateFilter.value === 'all' || container.state === stateFilter.value);
@@ -74,40 +68,6 @@ const loadHostMetrics = async () => {
     }
 };
 
-const runAction = async (container, action) => {
-    try {
-        await window.axios.post(`/api/containers/${container.id}/${action}`);
-        await loadContainers(true);
-    } catch (exception) {
-        error.value = exception.response?.data?.message ?? `ไม่สามารถ ${action} container ได้`;
-    }
-};
-
-const removeContainer = async (container) => {
-    if (!window.confirm(`ลบ ${container.name} ออกจาก Docker หรือไม่?`)) return;
-    try {
-        await window.axios.delete(`/api/containers/${container.id}`);
-        await loadContainers(true);
-    } catch (exception) {
-        error.value = exception.response?.data?.message ?? 'ลบ container ไม่สำเร็จ';
-    }
-};
-
-const createContainer = async () => {
-    creating.value = true;
-    createError.value = null;
-    try {
-        await window.axios.post('/api/containers', newContainer.value);
-        showCreate.value = false;
-        newContainer.value = { name: '', image: '' };
-        await loadContainers(true);
-    } catch (exception) {
-        createError.value = exception.response?.data?.message ?? 'สร้าง container ไม่สำเร็จ';
-    } finally {
-        creating.value = false;
-    }
-};
-
 const formatBytes = (value) => {
     if (value === null || value === undefined) return '—';
     if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
@@ -146,6 +106,5 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
             </tbody></table></div>
         </section>
 
-        <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false"><form class="create-modal" @submit.prevent="createContainer"><div class="modal-kicker">DEV ONLY / DOCKER</div><h2>สร้าง container ใหม่</h2><p>เพิ่ม container จาก image ใน Docker registry</p><label>ชื่อ container<input v-model="newContainer.name" required pattern="[a-zA-Z0-9][a-zA-Z0-9_.-]*" placeholder="mt5-terminal-01" /></label><label>Image<input v-model="newContainer.image" required placeholder="nginx:alpine" /></label><div v-if="createError" class="form-error">{{ createError }}</div><div class="modal-actions"><button type="button" class="button button-ghost" @click="showCreate = false">ยกเลิก</button><button class="button button-primary" :disabled="creating">{{ creating ? 'กำลังสร้าง...' : 'สร้าง container' }}</button></div></form></div>
     </ManagerLayout>
 </template>
