@@ -137,28 +137,41 @@ class DockerManager
         $running = array_values(array_filter($containers, static fn (array $container): bool => ($container['State'] ?? '') === 'running'));
         if ($running === []) return [];
 
-        try {
-            $responses = Http::pool(function (Pool $pool) use ($running): array {
-                return array_map(function (array $container) use ($pool) {
-                    $id = $container['Id'];
-
-                    return $pool->as($id)->baseUrl(config('docker.host'))
-                        ->timeout(config('docker.stats_timeout', 2))
-                        ->withOptions(['curl' => [CURLOPT_UNIX_SOCKET_PATH => config('docker.socket')]])
-                        ->acceptJson()
-                        ->get('/containers/'.$this->identifier($id).'/stats', ['stream' => false]);
-                }, $running);
-            });
-        } catch (\Throwable $exception) {
-            report($exception);
-
-            return [];
-        }
-
         $stats = [];
-        foreach ($responses as $id => $response) {
-            if ($response instanceof Response && $response->successful()) {
-                $stats[$id] = $response->json();
+        $batches = array_chunk($running, max(1, (int) config('docker.stats_concurrency', 4)));
+
+        foreach ($batches as $batch) {
+            try {
+                $responses = Http::pool(function (Pool $pool) use ($batch): array {
+                    return array_map(function (array $container) use ($pool) {
+                        $id = $container['Id'];
+
+                        return $pool->as($id)->baseUrl(config('docker.host'))
+                            ->timeout(config('docker.stats_timeout', 2))
+                            ->withOptions(['curl' => [CURLOPT_UNIX_SOCKET_PATH => config('docker.socket')]])
+                            ->acceptJson()
+                            ->get('/containers/'.$this->identifier($id).'/stats', ['stream' => false]);
+                    }, $batch);
+                });
+
+                foreach ($responses as $id => $response) {
+                    if ($response instanceof Response && $response->successful()) {
+                        $stats[$id] = $response->json();
+                    }
+                }
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+
+            foreach ($batch as $container) {
+                $id = $container['Id'];
+                if (isset($stats[$id])) continue;
+
+                try {
+                    $stats[$id] = $this->stats($id);
+                } catch (\Throwable $exception) {
+                    report($exception);
+                }
             }
         }
 
