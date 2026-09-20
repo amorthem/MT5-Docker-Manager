@@ -29,19 +29,6 @@ class DockerManager
         Cache::forget('docker:images');
     }
 
-    public function loadImage(string $tarPath): array
-    {
-        $response = $this->request()
-            ->withHeaders(['Content-Type' => 'application/x-tar'])
-            ->withBody((string) file_get_contents($tarPath), 'application/x-tar')
-            ->post('/images/load?quiet=0')
-            ->throw();
-
-        Cache::forget('docker:images');
-
-        return ['output' => $response->body()];
-    }
-
     public function create(string $name, string $image, array $options = []): array
     {
         $payload = ['Image' => $image];
@@ -241,7 +228,7 @@ class DockerManager
 
     private function imageIdentifier(string $image): string
     {
-        if (! preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9_.:@/-]*\z/', $image)) {
+        if (! preg_match('~\A[a-zA-Z0-9][a-zA-Z0-9_.:@/-]*\z~', $image)) {
             throw new RuntimeException('Invalid Docker image identifier.');
         }
 

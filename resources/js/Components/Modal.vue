@@ -20,19 +20,29 @@ const emit = defineEmits(['close']);
 const dialog = ref();
 const showSlot = ref(props.show);
 
-watch(() => props.show, () => {
+const openDialog = () => {
+    if (!dialog.value?.open) {
+        dialog.value?.showModal();
+    }
+};
+
+const syncDialog = () => {
     if (props.show) {
         document.body.style.overflow = 'hidden';
         showSlot.value = true;
-        dialog.value?.showModal();
+        openDialog();
     } else {
         document.body.style.overflow = null;
         setTimeout(() => {
-            dialog.value?.close();
+            if (dialog.value?.open) {
+                dialog.value.close();
+            }
             showSlot.value = false;
         }, 200);
     }
-});
+};
+
+watch(() => props.show, syncDialog);
 
 const close = () => {
     if (props.closeable) {
@@ -50,7 +60,10 @@ const closeOnEscape = (e) => {
     }
 };
 
-onMounted(() => document.addEventListener('keydown', closeOnEscape));
+onMounted(() => {
+    document.addEventListener('keydown', closeOnEscape);
+    syncDialog();
+});
 
 onUnmounted(() => {
     document.removeEventListener('keydown', closeOnEscape);
@@ -64,6 +77,7 @@ const maxWidthClass = computed(() => {
         'lg': 'sm:max-w-lg',
         'xl': 'sm:max-w-xl',
         '2xl': 'sm:max-w-2xl',
+        '4xl': 'sm:max-w-4xl',
     }[props.maxWidth];
 });
 </script>

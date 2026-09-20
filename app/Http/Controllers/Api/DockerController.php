@@ -48,18 +48,6 @@ class DockerController extends Controller
         });
     }
 
-    public function loadImage(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'archive' => ['required', 'file', 'max:524288', 'extensions:tar'],
-        ]);
-
-        return $this->run(fn () => [
-            'data' => $this->docker->loadImage($validated['archive']->getRealPath()),
-            'message' => 'Docker image loaded.',
-        ], 201);
-    }
-
     public function create(Request $request): JsonResponse
     {
         $validated = $request->validate([

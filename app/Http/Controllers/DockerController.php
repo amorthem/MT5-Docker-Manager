@@ -18,4 +18,9 @@ class DockerController extends Controller
             'containerId' => $container,
         ]);
     }
+
+    public function images(): Response
+    {
+        return Inertia::render('Docker/Images');
+    }
 }

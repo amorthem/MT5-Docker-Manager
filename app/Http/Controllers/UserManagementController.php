@@ -73,7 +73,7 @@ class UserManagementController extends Controller
         return $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email,'.($user?->id ?? 'NULL')],
-            'password' => [$creating ? 'required' : 'nullable', 'string', 'min:12'],
+            'password' => [$creating ? 'required' : 'nullable', 'string', 'min:8'],
             'role' => ['required', 'string', 'in:user,support,admin,dev'],
         ]);
     }

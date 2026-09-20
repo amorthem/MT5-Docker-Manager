@@ -16,6 +16,7 @@ const logout = () => router.post(route('logout'));
             <nav class="sidebar-nav">
                 <Link :href="route('dashboard')" :class="['sidebar-link', { active: route().current('dashboard') }]"> <span class="nav-icon">⌁</span> Overview </Link>
                 <Link :href="route('docker.containers.index')" :class="['sidebar-link', { active: route().current('docker.containers.*') }]"> <span class="nav-icon">▦</span> Containers </Link>
+                <Link v-if="$page.props.auth.user.role === 'dev'" :href="route('docker.images.index')" :class="['sidebar-link', { active: route().current('docker.images.*') }]"> <span class="nav-icon">◈</span> Docker Images </Link>
                 <Link v-if="['admin', 'dev'].includes($page.props.auth.user.role)" :href="route('users.index')" :class="['sidebar-link', { active: route().current('users.*') }]"> <span class="nav-icon">◎</span> Access & Users </Link>
             </nav>
             <div class="sidebar-footer">

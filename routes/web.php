@@ -8,7 +8,6 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\Api\DockerController as ApiDockerController;
 use App\Http\Controllers\Api\MetricsController;
-use Inertia\Inertia;
 
 Route::get('/', function () {
     return auth()->check() ? redirect()->route('dashboard') : redirect()->route('login');
@@ -26,7 +25,7 @@ Route::middleware([
         Route::get('/{container}', [DockerController::class, 'show'])->name('show');
     });
 
-    Route::get('/docker-images', fn () => Inertia::render('Docker/Images'))
+    Route::get('/docker-images', [DockerController::class, 'images'])
         ->middleware('role:dev')
         ->name('docker.images.index');
 
@@ -58,9 +57,6 @@ Route::middleware([
             ->middleware('role:dev')
             ->where('image', '.*')
             ->name('images.remove');
-        Route::post('/images/load', [ApiDockerController::class, 'loadImage'])
-            ->middleware('role:dev')
-            ->name('images.load');
         Route::post('/', [ApiDockerController::class, 'create'])
             ->middleware('role:dev')
             ->name('create');
