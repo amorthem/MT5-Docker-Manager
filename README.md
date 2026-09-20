@@ -42,6 +42,7 @@ APP_DEBUG=false
 APP_URL=http://YOUR_SERVER_IP:8000
 HOST_METRICS_SCOPE=vps-host
 SEED_DEFAULT_USER=false
+DOCKER_SOCKET_HOST=/var/run/docker.sock
 ```
 
 ### 3. Build และ start
@@ -174,6 +175,26 @@ docker compose logs --tail=100 app
 ```yaml
 - /var/run/docker.sock:/var/run/docker.sock:ro
 ```
+
+บน Ubuntu ที่ใช้ rootless Docker ให้ตรวจ socket ที่ใช้งานจริง:
+
+```bash
+docker context inspect --format '{{.Endpoints.docker.Host}}'
+```
+
+ถ้าได้ค่าเช่น `unix:///run/user/1000/docker.sock` ให้ตั้งค่าใน `.env` เป็น path ที่ตัด `unix://` ออก:
+
+```env
+DOCKER_SOCKET_HOST=/run/user/1000/docker.sock
+```
+
+จากนั้น recreate:
+
+```bash
+docker compose up -d --build --force-recreate
+```
+
+ถ้าใช้ Docker แบบ rootful ค่าเริ่มต้น `/var/run/docker.sock` ใช้ได้ตามปกติ
 
 ตรวจสอบว่า socket มีอยู่:
 
