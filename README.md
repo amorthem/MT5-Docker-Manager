@@ -44,6 +44,8 @@ HOST_METRICS_SCOPE=vps-host
 SEED_DEFAULT_USER=false
 DOCKER_SOCKET_HOST=/var/run/docker.sock
 DOCKER_STATS_TIMEOUT=2
+DOCKER_LOG_CHUNK_MB=50
+DOCKER_LOG_RETENTION_DAYS=30
 ```
 
 ### 3. Build และ start
@@ -71,6 +73,18 @@ docker compose ps
 docker compose logs --tail=100 app
 curl http://127.0.0.1:8000/up
 ```
+
+ระบบจะรัน Laravel scheduler และ queue worker ใน app container อัตโนมัติ โดยเก็บ Docker logs ทุก 10 วินาทีลงใน `storage/app/docker-logs/YY-MM-DD/` แยกตามชื่อและ ID ของ container ไฟล์จะหมุนที่ 50 MB และลบข้อมูลเก่ากว่า 30 วัน หน้าเว็บจะอ่าน logs จาก archive ก่อน จึงไม่ต้องรอ Docker Engine ทุกครั้ง
+
+ตรวจสอบ collector และ queue:
+
+```bash
+docker compose exec app php artisan schedule:list
+docker compose exec app php artisan docker:collect-logs
+docker compose logs --tail=100 app
+```
+
+ไฟล์ archive อยู่ใน named volume `app-storage` และจะคงอยู่หลัง rebuild หรือ restart ห้ามใช้ `docker compose down -v` หากต้องการรักษาประวัติ logs
 
 ผลลัพธ์ health check ที่ถูกต้องควรเป็น HTTP `200` และข้อความ `Application up`
 

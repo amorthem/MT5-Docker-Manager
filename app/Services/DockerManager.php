@@ -110,6 +110,11 @@ class DockerManager
         return $this->decodeLogs($this->request()->get('/containers/'.$this->identifier($id).'/logs', $query)->throw()->body());
     }
 
+    public function archivedLogs(string $id, int $tail = 200, ?string $since = null, ?string $until = null): string
+    {
+        return app(DockerLogStore::class)->read($this->identifier($id), $tail, $since, $until);
+    }
+
     public function stats(string $id): array
     {
         return $this->request()->get('/containers/'.$this->identifier($id).'/stats', ['stream' => false])->throw()->json();

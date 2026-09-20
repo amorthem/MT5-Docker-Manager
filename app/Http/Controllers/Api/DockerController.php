@@ -4,13 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\DockerManager;
+use App\Services\DockerLogStore;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
 
 class DockerController extends Controller
 {
-    public function __construct(private readonly DockerManager $docker) {}
+    public function __construct(
+        private readonly DockerManager $docker,
+        private readonly DockerLogStore $logStore,
+    ) {}
 
     public function index(): JsonResponse
     {
@@ -154,16 +158,24 @@ class DockerController extends Controller
             'until' => ['sometimes', 'string', 'max:32'],
         ]);
 
-        return $this->run(fn () => ['data' => [
-            'container' => $container,
-            'source' => 'docker-engine',
-            'logs' => $this->docker->logs(
-                $container,
-                $validated['tail'] ?? 200,
-                $validated['since'] ?? null,
-                $validated['until'] ?? null,
-            ),
-        ]]);
+        return $this->run(function () use ($container, $validated): array {
+            $tail = $validated['tail'] ?? 200;
+            $since = $validated['since'] ?? null;
+            $until = $validated['until'] ?? null;
+            $logs = $this->docker->archivedLogs($container, $tail, $since, $until);
+            $source = 'file';
+
+            if ($logs === '' && ! $this->logStore->hasLogs($container)) {
+                $logs = $this->docker->logs($container, $tail, $since, $until);
+                $source = 'docker-engine';
+            }
+
+            return ['data' => [
+                'container' => $container,
+                'source' => $source,
+                'logs' => $logs,
+            ]];
+        });
     }
 
     public function metrics(string $container): JsonResponse

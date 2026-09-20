@@ -7,4 +7,6 @@ return [
     'stats_timeout' => (int) env('DOCKER_STATS_TIMEOUT', 2),
     'stats_concurrency' => (int) env('DOCKER_STATS_CONCURRENCY', 4),
     'max_log_lines' => (int) env('DOCKER_MAX_LOG_LINES', 5000),
+    'log_chunk_mb' => (int) env('DOCKER_LOG_CHUNK_MB', 50),
+    'log_retention_days' => (int) env('DOCKER_LOG_RETENTION_DAYS', 30),
 ];
