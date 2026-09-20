@@ -38,4 +38,4 @@ RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framewor
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "php artisan migrate --force && if [ \"$SEED_DEFAULT_USER\" = \"true\" ]; then php artisan db:seed --class=UserSeeder --force; fi && php artisan config:cache && php artisan route:cache && php artisan serve --host=0.0.0.0 --port=8000"]
+CMD ["sh", "-c", "set -eu; key_file=/var/lib/mt5-config/app.key; mkdir -p /var/lib/mt5-config; if [ -n \"${APP_KEY:-}\" ]; then printf '%s' \"$APP_KEY\" > \"$key_file\"; elif [ ! -s \"$key_file\" ]; then php -r 'echo \"base64:\".base64_encode(random_bytes(32));' > \"$key_file\"; fi; export APP_KEY=\"$(cat \"$key_file\")\"; php artisan migrate --force; if [ \"${SEED_DEFAULT_USER:-false}\" = \"true\" ]; then php artisan db:seed --class=UserSeeder --force; fi; php artisan config:cache; php artisan route:cache; exec php artisan serve --host=0.0.0.0 --port=8000"]

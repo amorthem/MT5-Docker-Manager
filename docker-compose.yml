@@ -16,8 +16,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - app-storage:/var/www/html/storage
       - app-database:/var/lib/mt5-database
+      - app-config:/var/lib/mt5-config
     restart: unless-stopped
 
 volumes:
   app-storage:
   app-database:
+  app-config:

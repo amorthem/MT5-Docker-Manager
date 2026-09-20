@@ -1,61 +1,204 @@
-# MT5-Docker-Manager
+# MT5 Docker Manager
 
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+Laravel 12 + Jetstream + Inertia/Vue dashboard สำหรับ monitor และจัดการ Docker containers
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## Requirements
 
-## About Laravel
+- Ubuntu VPS
+- Docker Engine และ Docker Compose plugin
+- Git
+- Port `8000` เปิดใช้งาน หรือวาง reverse proxy ด้านหน้า
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+ตรวจสอบ Docker:
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+```bash
+docker --version
+docker compose version
+```
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Deploy บน VPS
 
-## Learning Laravel
+### 1. Clone project
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+```bash
+git clone https://github.com/amorthem/MT5-Docker-Manager.git
+cd MT5-Docker-Manager
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### 2. สร้าง environment
 
-## Laravel Sponsors
+ห้ามใช้ `.env` จากเครื่อง local และห้าม commit `.env` ขึ้น GitHub
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```bash
+cp .env.example .env
+```
 
-### Premium Partners
+แก้ค่าหลักใน `.env`:
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```env
+APP_NAME="MT5 Docker Manager"
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=http://YOUR_SERVER_IP:8000
+HOST_METRICS_SCOPE=vps-host
+SEED_DEFAULT_USER=false
+```
 
-## Contributing
+### 3. Build และ start
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+docker compose up -d --build
+```
 
-## Code of Conduct
+Docker จะสร้าง `APP_KEY` อัตโนมัติในครั้งแรกและเก็บไว้ใน named volume `app-config` จึงไม่เกิด `MissingAppKeyException` และ key จะคงเดิมหลัง restart
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+ถ้าต้องการกำหนด key เองสำหรับ production ให้ใส่ใน `.env` ก่อน start:
 
-## Security Vulnerabilities
+```env
+APP_KEY=base64:your-generated-key
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+ห้ามเปลี่ยน `APP_KEY` หลังระบบเริ่มใช้งานแล้ว เพราะจะทำให้ session และข้อมูลที่เข้ารหัสเดิมใช้ไม่ได้
+
+> คำสั่งที่ถูกต้องคือ `up` ไม่ใช่ `-up`
+
+ตรวจสอบสถานะ:
+
+```bash
+docker compose ps
+docker compose logs --tail=100 app
+curl http://127.0.0.1:8000/up
+```
+
+ผลลัพธ์ health check ที่ถูกต้องควรเป็น HTTP `200` และข้อความ `Application up`
+
+### 4. ตรวจ database และ default user
+
+สำหรับ production ให้รัน migration อย่างเดียว:
+
+```bash
+docker compose exec app php artisan migrate --force
+```
+
+หากต้องการสร้างบัญชี dev สำหรับเครื่องทดสอบเท่านั้น ให้ตั้งค่าใน `.env`:
+
+```env
+SEED_DEFAULT_USER=true
+```
+
+แล้ว recreate container:
+
+```bash
+docker compose up -d --build
+```
+
+บัญชีทดสอบ:
+
+```text
+Email: dev@localhost
+Password: 12345678
+Role: dev
+```
+
+ไม่ควรใช้บัญชีและ password นี้บน production จริง
+
+## URLs
+
+```text
+Dashboard:  http://YOUR_SERVER_IP:8000/dashboard
+Containers: http://YOUR_SERVER_IP:8000/docker-containers
+Login:      http://YOUR_SERVER_IP:8000/login
+```
+
+## Development แบบไม่ต้อง rebuild ทุกครั้ง
+
+เมื่อแก้ Vue/CSS/JS ให้ใช้:
+
+Terminal 1:
+
+```bash
+php artisan serve
+```
+
+Terminal 2:
+
+```bash
+npm run dev
+```
+
+หรือ:
+
+```bash
+composer run dev
+```
+
+ใช้ `docker compose up -d --build` เมื่อแก้ `Dockerfile`, `docker-compose.yml`, PHP extensions หรือ dependencies
+
+## แก้ MissingAppKeyException
+
+ถ้าเจอ:
+
+```text
+No application encryption key has been specified.
+```
+
+ให้ตรวจว่า container ทำงานและ volume สำหรับ key ถูกสร้างแล้ว:
+
+```bash
+docker compose ps
+docker volume ls | grep app-config
+```
+
+ถ้าเป็นระบบติดตั้งใหม่และต้องการสร้าง key เอง:
+
+```bash
+APP_KEY_VALUE="base64:$(openssl rand -base64 32)"
+sed -i "s|^APP_KEY=.*|APP_KEY=${APP_KEY_VALUE}|" .env
+docker compose up -d --build
+docker compose exec app php artisan config:clear
+docker compose exec app php artisan config:cache
+```
+
+ถ้ามี `APP_KEY` แล้วแต่ยัง error ให้ตรวจว่า Compose โหลดไฟล์ `.env` ถูกต้อง และ recreate container:
+
+```bash
+docker compose config
+docker compose up -d --force-recreate
+docker compose logs --tail=100 app
+```
+
+## Docker socket
+
+แอปเรียก Docker Engine API ผ่าน `/var/run/docker.sock` ไม่ได้เรียก shell command `docker ps` จากหน้าเว็บ โดย Compose mount socket ให้ container:
+
+```yaml
+- /var/run/docker.sock:/var/run/docker.sock:ro
+```
+
+ตรวจสอบว่า socket มีอยู่:
+
+```bash
+ls -l /var/run/docker.sock
+docker compose exec app ls -l /var/run/docker.sock
+```
+
+## Update version ใหม่
+
+```bash
+git pull origin main
+docker compose up -d --build
+docker compose exec app php artisan migrate --force
+```
+
+## Security notes
+
+- ใช้ `APP_DEBUG=false` บน production
+- ใช้ HTTPS และ reverse proxy เมื่อเปิดใช้งานจริง
+- เก็บ `.env` ไว้บน server เท่านั้น
+- อย่าเปิด Docker socket ให้ public
+- เปลี่ยน password default และปิด `SEED_DEFAULT_USER` บน production
+- อย่าเปลี่ยน `APP_KEY` ของระบบที่มีข้อมูลแล้ว
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This project is based on Laravel and is licensed under the MIT License.
