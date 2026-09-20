@@ -39,6 +39,5 @@ const submit = () => {
             <label class="auth-check"><Checkbox v-model:checked="form.remember" name="remember" /><span>Keep me signed in</span></label>
             <PrimaryButton class="auth-submit" :class="{ 'opacity-50': form.processing }" :disabled="form.processing">{{ form.processing ? 'Signing in...' : 'Sign in' }} <span>→</span></PrimaryButton>
         </form>
-        <p class="auth-switch">New to MT5 Manager? <Link :href="route('register')">Create an account</Link></p>
     </AuthLayout>
 </template>
