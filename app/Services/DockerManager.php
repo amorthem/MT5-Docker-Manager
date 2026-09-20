@@ -4,6 +4,8 @@ namespace App\Services;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -37,22 +39,24 @@ class DockerManager
 
     public function overview(): array
     {
-        $containers = $this->containers();
-        $stats = $this->statsForRunningContainers($containers);
+        return Cache::remember('docker:overview', 5, function (): array {
+            $containers = $this->containers();
+            $stats = $this->statsForRunningContainers($containers);
 
-        return array_map(function (array $container) use ($stats): array {
-            $id = $container['Id'] ?? '';
+            return array_map(function (array $container) use ($stats): array {
+                $id = $container['Id'] ?? '';
 
-            return [
-                'id' => $id,
-                'name' => ltrim($container['Names'][0] ?? $id, '/'),
-                'image' => $container['Image'] ?? null,
-                'state' => $container['State'] ?? 'unknown',
-                'status' => $container['Status'] ?? null,
-                'ports' => $this->ports($container['Ports'] ?? []),
-                'metrics' => $this->metricsFromStats($stats[$id] ?? null),
-            ];
-        }, $containers);
+                return [
+                    'id' => $id,
+                    'name' => ltrim($container['Names'][0] ?? $id, '/'),
+                    'image' => $container['Image'] ?? null,
+                    'state' => $container['State'] ?? 'unknown',
+                    'status' => $container['Status'] ?? null,
+                    'ports' => $this->ports($container['Ports'] ?? []),
+                    'metrics' => $this->metricsFromStats($stats[$id] ?? null),
+                ];
+            }, $containers);
+        });
     }
 
     public function container(string $id): array
@@ -107,21 +111,29 @@ class DockerManager
         $running = array_values(array_filter($containers, static fn (array $container): bool => ($container['State'] ?? '') === 'running'));
         if ($running === []) return [];
 
-        $responses = Http::pool(function (Pool $pool) use ($running): array {
-            return array_map(function (array $container) use ($pool) {
-                $id = $container['Id'];
+        try {
+            $responses = Http::pool(function (Pool $pool) use ($running): array {
+                return array_map(function (array $container) use ($pool) {
+                    $id = $container['Id'];
 
-                return $pool->as($id)->baseUrl(config('docker.host'))
-                    ->timeout(config('docker.stats_timeout', 2))
-                    ->withOptions(['curl' => [CURLOPT_UNIX_SOCKET_PATH => config('docker.socket')]])
-                    ->acceptJson()
-                    ->get('/containers/'.$this->identifier($id).'/stats', ['stream' => false]);
-            }, $running);
-        });
+                    return $pool->as($id)->baseUrl(config('docker.host'))
+                        ->timeout(config('docker.stats_timeout', 2))
+                        ->withOptions(['curl' => [CURLOPT_UNIX_SOCKET_PATH => config('docker.socket')]])
+                        ->acceptJson()
+                        ->get('/containers/'.$this->identifier($id).'/stats', ['stream' => false]);
+                }, $running);
+            });
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return [];
+        }
 
         $stats = [];
         foreach ($responses as $id => $response) {
-            if ($response->successful()) $stats[$id] = $response->json();
+            if ($response instanceof Response && $response->successful()) {
+                $stats[$id] = $response->json();
+            }
         }
 
         return $stats;
