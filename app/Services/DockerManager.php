@@ -21,12 +21,24 @@ class DockerManager
         return $this->request()->get('/images/json', ['all' => true])->throw()->json();
     }
 
-    public function create(string $name, string $image, ?array $command = null): array
+    public function create(string $name, string $image, array $options = []): array
     {
         $payload = ['Image' => $image];
 
-        if ($command !== null) {
-            $payload['Cmd'] = $command;
+        if (! empty($options['command'])) {
+            $payload['Cmd'] = $options['command'];
+        }
+
+        if (! empty($options['env'])) {
+            $payload['Env'] = $options['env'];
+        }
+
+        if (! empty($options['host_config'])) {
+            $payload['HostConfig'] = $options['host_config'];
+        }
+
+        if (! empty($options['exposed_ports'])) {
+            $payload['ExposedPorts'] = $options['exposed_ports'];
         }
 
         return $this->request()->post('/containers/create?name='.rawurlencode($name), $payload)->throw()->json();
@@ -35,6 +47,20 @@ class DockerManager
     public function remove(string $id, bool $force = false): void
     {
         $this->request()->delete('/containers/'.$this->identifier($id), ['force' => $force])->throw();
+        Cache::forget('docker:overview');
+    }
+
+    public function updateResources(string $id, array $resources): void
+    {
+        $this->request()->post('/containers/'.$this->identifier($id).'/update', [
+            'NanoCpus' => (int) round((float) $resources['cpus'] * 1_000_000_000),
+            'Memory' => $this->bytes($resources['memory']),
+            'MemorySwap' => -1,
+            'MemoryReservation' => $this->bytes($resources['memory_reservation']),
+            'RestartPolicy' => ['Name' => $resources['restart']],
+        ])->throw();
+
+        Cache::forget('docker:overview');
     }
 
     public function overview(): array
@@ -146,6 +172,27 @@ class DockerManager
         }
 
         return $id;
+    }
+
+    private function bytes(string $value): int
+    {
+        preg_match('/\A(\d+(?:\.\d+)?)\s*(b|k|m|g|t|kb|mb|gb|tb)\z/i', trim($value), $matches);
+        $number = (float) $matches[1];
+
+        return (int) round($number * match (strtolower($matches[2])) {
+            't' => 1024 ** 4,
+            'tb' => 1024 ** 4,
+            'g' => 1024 ** 3,
+            'g' => 1024 ** 3,
+            'm' => 1024 ** 2,
+            'gb' => 1024 ** 3,
+            'k' => 1024,
+            'mb' => 1024 ** 2,
+            'm' => 1024 ** 2,
+            'kb' => 1024,
+            'b' => 1,
+            default => 1024,
+        });
     }
 
     private function decodeLogs(string $body): string
