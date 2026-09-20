@@ -43,6 +43,7 @@ APP_URL=http://YOUR_SERVER_IP:8000
 HOST_METRICS_SCOPE=vps-host
 SEED_DEFAULT_USER=false
 DOCKER_SOCKET_HOST=/var/run/docker.sock
+DOCKER_STATS_TIMEOUT=2
 ```
 
 ### 3. Build และ start

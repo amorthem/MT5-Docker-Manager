@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -36,15 +37,11 @@ class DockerManager
 
     public function overview(): array
     {
-        return array_map(function (array $container): array {
-            $id = $container['Id'] ?? '';
-            $stats = null;
+        $containers = $this->containers();
+        $stats = $this->statsForRunningContainers($containers);
 
-            try {
-                $stats = $this->stats($id);
-            } catch (\Throwable) {
-                // A stopped container may not have stats. Keep it visible with stale metrics.
-            }
+        return array_map(function (array $container) use ($stats): array {
+            $id = $container['Id'] ?? '';
 
             return [
                 'id' => $id,
@@ -53,9 +50,9 @@ class DockerManager
                 'state' => $container['State'] ?? 'unknown',
                 'status' => $container['Status'] ?? null,
                 'ports' => $this->ports($container['Ports'] ?? []),
-                'metrics' => $this->metricsFromStats($stats),
+                'metrics' => $this->metricsFromStats($stats[$id] ?? null),
             ];
-        }, $this->containers());
+        }, $containers);
     }
 
     public function container(string $id): array
@@ -103,6 +100,31 @@ class DockerManager
             ->timeout(config('docker.timeout'))
             ->withOptions(['curl' => [CURLOPT_UNIX_SOCKET_PATH => config('docker.socket')]])
             ->acceptJson();
+    }
+
+    private function statsForRunningContainers(array $containers): array
+    {
+        $running = array_values(array_filter($containers, static fn (array $container): bool => ($container['State'] ?? '') === 'running'));
+        if ($running === []) return [];
+
+        $responses = Http::pool(function (Pool $pool) use ($running): array {
+            return array_map(function (array $container) use ($pool) {
+                $id = $container['Id'];
+
+                return $pool->as($id)->baseUrl(config('docker.host'))
+                    ->timeout(config('docker.stats_timeout', 2))
+                    ->withOptions(['curl' => [CURLOPT_UNIX_SOCKET_PATH => config('docker.socket')]])
+                    ->acceptJson()
+                    ->get('/containers/'.$this->identifier($id).'/stats', ['stream' => false]);
+            }, $running);
+        });
+
+        $stats = [];
+        foreach ($responses as $id => $response) {
+            if ($response->successful()) $stats[$id] = $response->json();
+        }
+
+        return $stats;
     }
 
     private function identifier(string $id): string
@@ -155,7 +177,7 @@ class DockerManager
     private function metricsFromStats(?array $stats): array
     {
         if ($stats === null) {
-            return ['cpu_percent' => null, 'memory_used' => null, 'memory_limit' => null, 'stale' => true];
+            return ['cpu_percent' => null, 'memory_used' => null, 'memory_limit' => null, 'memory_percent' => null, 'stale' => true];
         }
 
         $cpuDelta = ($stats['cpu_stats']['cpu_usage']['total_usage'] ?? 0)
@@ -169,6 +191,9 @@ class DockerManager
             'cpu_percent' => $cpuPercent === null ? null : round($cpuPercent, 2),
             'memory_used' => $stats['memory_stats']['usage'] ?? null,
             'memory_limit' => $stats['memory_stats']['limit'] ?? null,
+            'memory_percent' => ($stats['memory_stats']['limit'] ?? 0) > 0
+                ? round((($stats['memory_stats']['usage'] ?? 0) / $stats['memory_stats']['limit']) * 100, 2)
+                : null,
             'stale' => false,
         ];
     }
