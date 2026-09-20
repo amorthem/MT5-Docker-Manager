@@ -1,0 +1,23 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.docker
+        required: false
+    environment:
+      DB_DATABASE: /var/lib/mt5-database/database.sqlite
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - app-storage:/var/www/html/storage
+      - app-database:/var/lib/mt5-database
+    restart: unless-stopped
+
+volumes:
+  app-storage:
+  app-database:

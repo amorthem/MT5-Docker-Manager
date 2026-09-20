@@ -1,0 +1,175 @@
+<?php
+
+namespace App\Services;
+
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Http;
+use RuntimeException;
+
+class DockerManager
+{
+    public function containers(): array
+    {
+        return $this->request()->get('/containers/json', ['all' => true])->throw()->json();
+    }
+
+    public function images(): array
+    {
+        return $this->request()->get('/images/json', ['all' => true])->throw()->json();
+    }
+
+    public function create(string $name, string $image, ?array $command = null): array
+    {
+        $payload = ['Image' => $image];
+
+        if ($command !== null) {
+            $payload['Cmd'] = $command;
+        }
+
+        return $this->request()->post('/containers/create?name='.rawurlencode($name), $payload)->throw()->json();
+    }
+
+    public function remove(string $id, bool $force = false): void
+    {
+        $this->request()->delete('/containers/'.$this->identifier($id), ['force' => $force])->throw();
+    }
+
+    public function overview(): array
+    {
+        return array_map(function (array $container): array {
+            $id = $container['Id'] ?? '';
+            $stats = null;
+
+            try {
+                $stats = $this->stats($id);
+            } catch (\Throwable) {
+                // A stopped container may not have stats. Keep it visible with stale metrics.
+            }
+
+            return [
+                'id' => $id,
+                'name' => ltrim($container['Names'][0] ?? $id, '/'),
+                'image' => $container['Image'] ?? null,
+                'state' => $container['State'] ?? 'unknown',
+                'status' => $container['Status'] ?? null,
+                'ports' => $this->ports($container['Ports'] ?? []),
+                'metrics' => $this->metricsFromStats($stats),
+            ];
+        }, $this->containers());
+    }
+
+    public function container(string $id): array
+    {
+        return $this->request()->get('/containers/'.$this->identifier($id).'/json')->throw()->json();
+    }
+
+    public function logs(string $id, int $tail = 200, ?string $since = null, ?string $until = null): string
+    {
+        $query = [
+            'stdout' => 1,
+            'stderr' => 1,
+            'timestamps' => 1,
+            'tail' => min(max($tail, 1), config('docker.max_log_lines')),
+        ];
+
+        if ($since !== null) {
+            $query['since'] = $since;
+        }
+
+        if ($until !== null) {
+            $query['until'] = $until;
+        }
+
+        return $this->decodeLogs($this->request()->get('/containers/'.$this->identifier($id).'/logs', $query)->throw()->body());
+    }
+
+    public function stats(string $id): array
+    {
+        return $this->request()->get('/containers/'.$this->identifier($id).'/stats', ['stream' => false])->throw()->json();
+    }
+
+    public function action(string $id, string $action): void
+    {
+        if (! in_array($action, ['start', 'stop', 'restart'], true)) {
+            throw new RuntimeException('Invalid Docker action.');
+        }
+
+        $this->request()->post('/containers/'.$this->identifier($id).'/'.$action)->throw();
+    }
+
+    private function request(): PendingRequest
+    {
+        return Http::baseUrl(config('docker.host'))
+            ->timeout(config('docker.timeout'))
+            ->withOptions(['curl' => [CURLOPT_UNIX_SOCKET_PATH => config('docker.socket')]])
+            ->acceptJson();
+    }
+
+    private function identifier(string $id): string
+    {
+        if (! preg_match('/\A[a-f0-9]{12,64}\z/i', $id)) {
+            throw new RuntimeException('Invalid Docker container identifier.');
+        }
+
+        return $id;
+    }
+
+    private function decodeLogs(string $body): string
+    {
+        $length = strlen($body);
+        $offset = 0;
+        $decoded = '';
+
+        while ($offset + 8 <= $length) {
+            $stream = ord($body[$offset]);
+            $frameLength = unpack('Nlength', substr($body, $offset + 4, 4))['length'];
+
+            if (! in_array($stream, [1, 2], true) || $offset + 8 + $frameLength > $length) {
+                return $body;
+            }
+
+            $decoded .= substr($body, $offset + 8, $frameLength);
+            $offset += 8 + $frameLength;
+        }
+
+        return $offset === $length ? $decoded : $body;
+    }
+
+    private function ports(array $ports): array
+    {
+        return array_values(array_map(function (array $port): array {
+            $public = $port['PublicPort'] ?? null;
+            $private = $port['PrivatePort'] ?? null;
+            $host = $port['IP'] ?? '127.0.0.1';
+
+            return [
+                'host' => $host,
+                'public' => $public,
+                'private' => $private,
+                'type' => $port['Type'] ?? 'tcp',
+                'url' => $public === null ? null : sprintf('http://%s:%d', $host === '0.0.0.0' ? 'localhost' : $host, $public),
+            ];
+        }, array_filter($ports, static fn (array $port): bool => isset($port['PrivatePort']))));
+    }
+
+    private function metricsFromStats(?array $stats): array
+    {
+        if ($stats === null) {
+            return ['cpu_percent' => null, 'memory_used' => null, 'memory_limit' => null, 'stale' => true];
+        }
+
+        $cpuDelta = ($stats['cpu_stats']['cpu_usage']['total_usage'] ?? 0)
+            - ($stats['precpu_stats']['cpu_usage']['total_usage'] ?? 0);
+        $systemDelta = ($stats['cpu_stats']['system_cpu_usage'] ?? 0)
+            - ($stats['precpu_stats']['system_cpu_usage'] ?? 0);
+        $cpuCount = $stats['cpu_stats']['online_cpus'] ?? count($stats['cpu_stats']['cpu_usage']['percpu_usage'] ?? []) ?: 1;
+        $cpuPercent = $systemDelta > 0 ? ($cpuDelta / $systemDelta) * $cpuCount * 100 : null;
+
+        return [
+            'cpu_percent' => $cpuPercent === null ? null : round($cpuPercent, 2),
+            'memory_used' => $stats['memory_stats']['usage'] ?? null,
+            'memory_limit' => $stats['memory_stats']['limit'] ?? null,
+            'stale' => false,
+        ];
+    }
+}
