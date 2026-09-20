@@ -26,6 +26,10 @@ Route::middleware([
         Route::get('/{container}', [DockerController::class, 'show'])->name('show');
     });
 
+    Route::get('/docker-images', fn () => Inertia::render('Docker/Images'))
+        ->middleware('role:dev')
+        ->name('docker.images.index');
+
     Route::prefix('dashboard/data')->name('dashboard.data.')->group(function () {
         Route::get('/containers/overview', [ApiDockerController::class, 'overview'])->name('containers.overview');
         Route::get('/metrics/host', [MetricsController::class, 'host'])->name('metrics.host');
@@ -38,6 +42,7 @@ Route::middleware([
             ->name('resources');
         Route::get('/{container}', [ApiDockerController::class, 'show'])->name('show');
         Route::get('/{container}/logs', [ApiDockerController::class, 'logs'])->name('logs');
+        Route::get('/{container}/logs/archives', [ApiDockerController::class, 'logArchives'])->name('logs.archives');
         Route::get('/{container}/metrics', [ApiDockerController::class, 'metrics'])->name('metrics');
         Route::post('/{container}/{action}', [ApiDockerController::class, 'action'])
             ->whereIn('action', ['start', 'stop', 'restart'])
@@ -49,6 +54,13 @@ Route::middleware([
         Route::get('/images/list', [ApiDockerController::class, 'images'])
             ->middleware('role:dev')
             ->name('images');
+        Route::delete('/images/{image}', [ApiDockerController::class, 'removeImage'])
+            ->middleware('role:dev')
+            ->where('image', '.*')
+            ->name('images.remove');
+        Route::post('/images/load', [ApiDockerController::class, 'loadImage'])
+            ->middleware('role:dev')
+            ->name('images.load');
         Route::post('/', [ApiDockerController::class, 'create'])
             ->middleware('role:dev')
             ->name('create');

@@ -26,6 +26,14 @@ export function useNavigationMenu() {
             });
         }
 
+        if (page.props.auth.user.role === 'dev') {
+            navigation.push({
+                label: 'Docker Images',
+                href: route('docker.images.index'),
+                active: 'docker.images.*',
+            });
+        }
+
         return navigation;
     });
 

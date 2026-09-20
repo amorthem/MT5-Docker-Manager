@@ -15,7 +15,9 @@ class DockerLogCollector
     {
         $collected = 0;
 
-        foreach ($this->docker->containers() as $container) {
+        $containers = $this->docker->containers();
+
+        foreach ($containers as $container) {
             $id = $container['Id'] ?? null;
             if (! is_string($id) || $id === '') {
                 continue;
@@ -32,6 +34,12 @@ class DockerLogCollector
                     'exception' => $exception,
                 ]);
             }
+        }
+
+        try {
+            $this->docker->refreshOverview($containers);
+        } catch (\Throwable $exception) {
+            Log::warning('Docker metrics collection failed.', ['exception' => $exception]);
         }
 
         $this->store->prune();

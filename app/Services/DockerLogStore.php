@@ -62,6 +62,46 @@ class DockerLogStore
         return implode(PHP_EOL, array_slice($filtered, -$tail)).($filtered === [] ? '' : PHP_EOL);
     }
 
+    public function archives(string $containerId): array
+    {
+        $archives = [];
+        $pattern = $this->rootPath().'/*/*_'.$this->shortId($containerId).'-*.log';
+
+        foreach (glob($pattern) ?: [] as $path) {
+            $date = basename(dirname($path));
+            $file = basename($path);
+            $archives[$date][] = [
+                'date' => $date,
+                'file' => $file,
+                'size' => filesize($path) ?: 0,
+                'modified_at' => date(DATE_ATOM, filemtime($path) ?: time()),
+            ];
+        }
+
+        krsort($archives);
+        foreach ($archives as &$files) {
+            usort($files, static fn (array $left, array $right): int => strcmp($right['file'], $left['file']));
+        }
+
+        return $archives;
+    }
+
+    public function readArchive(string $containerId, string $date, string $file, int $tail = 200): string
+    {
+        if (! preg_match('/\A\d{2}-\d{2}-\d{2}\z/', $date)
+            || ! preg_match('/\A[a-zA-Z0-9_.-]+\.log\z/', $file)
+            || ! str_contains($file, '_'.$this->shortId($containerId).'-')) {
+            throw new RuntimeException('Invalid Docker log archive.');
+        }
+
+        $path = $this->rootPath().'/'.$date.'/'.$file;
+        if (! is_file($path)) {
+            throw new RuntimeException('Docker log archive not found.');
+        }
+
+        return implode(PHP_EOL, $this->tailLines($path, $tail)).PHP_EOL;
+    }
+
     public function hasLogs(string $containerId): bool
     {
         return glob($this->rootPath().'/*/*_'.$this->shortId($containerId).'-*.log') !== [];

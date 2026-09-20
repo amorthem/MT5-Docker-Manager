@@ -14,6 +14,9 @@ const loading = ref(true);
 const logsLoading = ref(true);
 const metricsLoading = ref(true);
 const restarting = ref(false);
+const archives = ref({});
+const selectedDate = ref('');
+const selectedFile = ref('');
 const page = usePage();
 const canRestart = computed(() => ['support', 'admin', 'dev'].includes(page.props.auth.user.role));
 
@@ -33,13 +36,34 @@ const loadLogs = async () => {
     logsError.value = null;
 
     try {
-        const response = await window.axios.get(`/docker-containers/data/${props.containerId}/logs?tail=200`);
+        const query = new URLSearchParams({ tail: '200' });
+        if (selectedDate.value && selectedFile.value) {
+            query.set('date', selectedDate.value);
+            query.set('file', selectedFile.value);
+        }
+        const response = await window.axios.get(`/docker-containers/data/${props.containerId}/logs?${query}`);
         logs.value = response.data.data.logs ?? '';
     } catch (exception) {
         logsError.value = exception.response?.data?.message ?? 'โหลด Docker container logs ไม่สำเร็จ';
     } finally {
         logsLoading.value = false;
     }
+};
+
+const loadArchives = async () => {
+    try {
+        archives.value = (await window.axios.get(`/docker-containers/data/${props.containerId}/logs/archives`)).data.data ?? {};
+        const dates = Object.keys(archives.value);
+        selectedDate.value = dates[0] ?? '';
+        selectedFile.value = archives.value[selectedDate.value]?.[0]?.file ?? '';
+    } catch (exception) {
+        archives.value = {};
+    }
+};
+
+const selectDate = () => {
+    selectedFile.value = archives.value[selectedDate.value]?.[0]?.file ?? '';
+    loadLogs();
 };
 
 const loadMetrics = async () => {
@@ -72,7 +96,10 @@ const restartContainer = async () => {
     }
 };
 
-onMounted(() => Promise.all([loadContainer(), loadLogs(), loadMetrics()]));
+onMounted(async () => {
+    await loadArchives();
+    await Promise.all([loadContainer(), loadLogs(), loadMetrics()]);
+});
 </script>
 
 <template>
@@ -86,7 +113,7 @@ onMounted(() => Promise.all([loadContainer(), loadLogs(), loadMetrics()]));
         <div v-if="error" class="alert-error">{{ error }}</div>
         <section class="container-detail-grid">
             <article class="content-panel detail-summary"><div class="panel-header"><div><h2>Container status</h2><p>ข้อมูลจาก Docker Engine API</p></div><span :class="['state-pill', container?.State?.Running ? 'state-pill--running' : 'state-pill--stopped']"><i />{{ container?.State?.Status ?? 'loading' }}</span></div><div class="detail-facts"><div><span>IMAGE</span><strong>{{ container?.Config?.Image ?? '—' }}</strong></div><div><span>CONTAINER ID</span><strong>{{ props.containerId }}</strong></div><div><span>STARTED</span><strong>{{ container?.State?.StartedAt ?? '—' }}</strong></div></div></article>
-            <article class="content-panel logs-panel"><div class="panel-header"><div><h2>Docker container logs</h2><p>stdout / stderr จาก Docker Engine · tail 200 lines</p></div><button class="button button-ghost" :disabled="logsLoading" @click="loadLogs">{{ logsLoading ? 'กำลังโหลด...' : '↻ Refresh logs' }}</button></div><div v-if="logsError" class="detail-error">{{ logsError }}</div><div v-else-if="logsLoading" class="empty-state">กำลังอ่าน logs จาก Docker container...</div><pre v-else class="docker-log-output">{{ logs || 'Container นี้ยังไม่มี Docker logs' }}</pre></article>
+            <article class="content-panel logs-panel"><div class="panel-header"><div><h2>Docker container logs</h2><p>อ่านจาก archive file · tail 200 lines</p></div><div class="heading-actions"><select v-model="selectedDate" class="log-select" @change="selectDate"><option value="">ทุกวันที่ / ล่าสุด</option><option v-for="date in Object.keys(archives)" :key="date" :value="date">{{ date }}</option></select><select v-model="selectedFile" class="log-select" :disabled="!selectedDate" @change="loadLogs"><option value="">ไฟล์ล่าสุด</option><option v-for="file in (archives[selectedDate] ?? [])" :key="file.file" :value="file.file">{{ file.file }} ({{ Math.ceil(file.size / 1024) }} KB)</option></select><button class="button button-ghost" :disabled="logsLoading" @click="loadLogs">{{ logsLoading ? 'กำลังโหลด...' : '↻ Refresh logs' }}</button></div></div><div v-if="logsError" class="detail-error">{{ logsError }}</div><div v-else-if="logsLoading" class="empty-state">กำลังอ่าน logs จาก archive...</div><pre v-else class="docker-log-output">{{ logs || 'Container นี้ยังไม่มี Docker logs' }}</pre></article>
             <article class="content-panel"><div class="panel-header"><div><h2>Resource metrics</h2><p>ข้อมูล usage จาก Docker stats API</p></div></div><div v-if="metricsError" class="detail-error">{{ metricsError }}</div><pre v-else-if="metricsLoading" class="detail-code">กำลังโหลด metrics...</pre><pre v-else class="detail-code">{{ JSON.stringify(metrics?.stats, null, 2) }}</pre></article>
         </section>
     </ManagerLayout>

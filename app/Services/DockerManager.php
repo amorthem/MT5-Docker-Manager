@@ -18,7 +18,28 @@ class DockerManager
 
     public function images(): array
     {
-        return $this->request()->get('/images/json', ['all' => true])->throw()->json();
+        return Cache::remember('docker:images', 10, fn () =>
+            $this->request()->get('/images/json', ['all' => true])->throw()->json()
+        );
+    }
+
+    public function removeImage(string $image): void
+    {
+        $this->request()->delete('/images/'.$this->imageIdentifier($image))->throw();
+        Cache::forget('docker:images');
+    }
+
+    public function loadImage(string $tarPath): array
+    {
+        $response = $this->request()
+            ->withHeaders(['Content-Type' => 'application/x-tar'])
+            ->withBody((string) file_get_contents($tarPath), 'application/x-tar')
+            ->post('/images/load?quiet=0')
+            ->throw();
+
+        Cache::forget('docker:images');
+
+        return ['output' => $response->body()];
     }
 
     public function create(string $name, string $image, array $options = []): array
@@ -41,13 +62,17 @@ class DockerManager
             $payload['ExposedPorts'] = $options['exposed_ports'];
         }
 
-        return $this->request()->post('/containers/create?name='.rawurlencode($name), $payload)->throw()->json();
+        $container = $this->request()->post('/containers/create?name='.rawurlencode($name), $payload)->throw()->json();
+        Cache::forget('docker:overview');
+
+        return $container;
     }
 
     public function remove(string $id, bool $force = false): void
     {
         $this->request()->delete('/containers/'.$this->identifier($id), ['force' => $force])->throw();
         Cache::forget('docker:overview');
+        Cache::forget('docker:container:'.$this->identifier($id));
     }
 
     public function updateResources(string $id, array $resources): void
@@ -65,29 +90,40 @@ class DockerManager
 
     public function overview(): array
     {
-        return Cache::remember('docker:overview', 5, function (): array {
-            $containers = $this->containers();
-            $stats = $this->statsForRunningContainers($containers);
+        return Cache::get('docker:overview') ?? $this->refreshOverview();
+    }
 
-            return array_map(function (array $container) use ($stats): array {
-                $id = $container['Id'] ?? '';
+    public function refreshOverview(?array $containers = null): array
+    {
+        $containers ??= $this->containers();
+        $stats = $this->statsForRunningContainers($containers);
 
-                return [
-                    'id' => $id,
-                    'name' => ltrim($container['Names'][0] ?? $id, '/'),
-                    'image' => $container['Image'] ?? null,
-                    'state' => $container['State'] ?? 'unknown',
-                    'status' => $container['Status'] ?? null,
-                    'ports' => $this->ports($container['Ports'] ?? []),
-                    'metrics' => $this->metricsFromStats($stats[$id] ?? null),
-                ];
-            }, $containers);
-        });
+        $overview = array_map(function (array $container) use ($stats): array {
+            $id = $container['Id'] ?? '';
+
+            return [
+                'id' => $id,
+                'name' => ltrim($container['Names'][0] ?? $id, '/'),
+                'image' => $container['Image'] ?? null,
+                'state' => $container['State'] ?? 'unknown',
+                'status' => $container['Status'] ?? null,
+                'ports' => $this->ports($container['Ports'] ?? []),
+                'metrics' => $this->metricsFromStats($stats[$id] ?? null),
+            ];
+        }, $containers);
+
+        Cache::put('docker:overview', $overview, now()->addSeconds(30));
+
+        return $overview;
     }
 
     public function container(string $id): array
     {
-        return $this->request()->get('/containers/'.$this->identifier($id).'/json')->throw()->json();
+        $id = $this->identifier($id);
+
+        return Cache::remember('docker:container:'.$id, 10, fn () =>
+            $this->request()->get('/containers/'.$id.'/json')->throw()->json()
+        );
     }
 
     public function logs(string $id, int $tail = 200, ?string $since = null, ?string $until = null): string
@@ -117,7 +153,16 @@ class DockerManager
 
     public function stats(string $id): array
     {
-        return $this->request()->get('/containers/'.$this->identifier($id).'/stats', ['stream' => false])->throw()->json();
+        $id = $this->identifier($id);
+        $overview = Cache::get('docker:overview', []);
+
+        foreach ($overview as $container) {
+            if (($container['id'] ?? null) === $id) {
+                return $container['metrics'] ?? [];
+            }
+        }
+
+        return $this->request()->get('/containers/'.$id.'/stats', ['stream' => false])->throw()->json();
     }
 
     public function action(string $id, string $action): void
@@ -127,6 +172,8 @@ class DockerManager
         }
 
         $this->request()->post('/containers/'.$this->identifier($id).'/'.$action)->throw();
+        Cache::forget('docker:overview');
+        Cache::forget('docker:container:'.$this->identifier($id));
     }
 
     private function request(): PendingRequest
@@ -190,6 +237,15 @@ class DockerManager
         }
 
         return $id;
+    }
+
+    private function imageIdentifier(string $image): string
+    {
+        if (! preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9_.:@/-]*\z/', $image)) {
+            throw new RuntimeException('Invalid Docker image identifier.');
+        }
+
+        return rawurlencode($image);
     }
 
     private function bytes(string $value): int

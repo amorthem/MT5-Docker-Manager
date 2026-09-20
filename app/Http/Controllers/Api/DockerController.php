@@ -39,6 +39,27 @@ class DockerController extends Controller
         )))]);
     }
 
+    public function removeImage(string $image): JsonResponse
+    {
+        return $this->run(function () use ($image): array {
+            $this->docker->removeImage($image);
+
+            return ['message' => 'Docker image removed.'];
+        });
+    }
+
+    public function loadImage(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'archive' => ['required', 'file', 'max:524288', 'extensions:tar'],
+        ]);
+
+        return $this->run(fn () => [
+            'data' => $this->docker->loadImage($validated['archive']->getRealPath()),
+            'message' => 'Docker image loaded.',
+        ], 201);
+    }
+
     public function create(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -162,7 +183,11 @@ class DockerController extends Controller
             $tail = $validated['tail'] ?? 200;
             $since = $validated['since'] ?? null;
             $until = $validated['until'] ?? null;
-            $logs = $this->docker->archivedLogs($container, $tail, $since, $until);
+            $date = $validated['date'] ?? null;
+            $file = $validated['file'] ?? null;
+            $logs = $date !== null && $file !== null
+                ? $this->logStore->readArchive($container, $date, $file, $tail)
+                : $this->docker->archivedLogs($container, $tail, $since, $until);
             $source = 'file';
 
             if ($logs === '' && ! $this->logStore->hasLogs($container)) {
@@ -176,6 +201,11 @@ class DockerController extends Controller
                 'logs' => $logs,
             ]];
         });
+    }
+
+    public function logArchives(string $container): JsonResponse
+    {
+        return $this->run(fn () => ['data' => $this->logStore->archives($container)]);
     }
 
     public function metrics(string $container): JsonResponse
